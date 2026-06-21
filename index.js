@@ -4,7 +4,21 @@ const { DisTube } = require('distube');
 const { SpotifyPlugin } = require('@distube/spotify');
 const { SoundCloudPlugin } = require('@distube/soundcloud');
 const ffmpeg = require('ffmpeg-static');
+const express = require('express');
 
+// --- 1. Render Port Binding (Dummy Web Server) ---
+const app = express();
+const port = process.env.PORT || 10000;
+
+app.get('/', (req, res) => {
+    res.send('Neliel is online and functioning!');
+});
+
+app.listen(port, () => {
+    console.log(`🛡️ Web server active on port ${port} to satisfy Render checks.`);
+});
+
+// --- 2. Discord Client Initialization ---
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -14,7 +28,7 @@ const client = new Client({
     ]
 });
 
-// Initialize DisTube using SoundCloud as the unblockable background engine
+// --- 3. DisTube Configuration ---
 const distube = new DisTube(client, {
     emitNewSongOnly: true,
     ffmpeg: {
@@ -22,7 +36,7 @@ const distube = new DisTube(client, {
     },
     plugins: [
         new SpotifyPlugin(),
-        new SoundCloudPlugin() // Completely bypasses YouTube's 0-byte ghost streams
+        new SoundCloudPlugin() // Bypasses YouTube's strict blocking
     ]
 });
 
@@ -32,12 +46,14 @@ client.once('ready', () => {
     console.log(`🎵 Neliel is online and running on the stable SoundCloud bypass!`);
 });
 
+// --- 4. Command Handler ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith(PREFIX)) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
+    // !play Command
     if (command === 'play') {
         const voiceChannel = message.member.voice.channel;
         if (!voiceChannel) return message.reply('You need to be in a voice channel!');
@@ -46,7 +62,7 @@ client.on('messageCreate', async (message) => {
         if (!query) return message.reply('Please provide a Spotify link!');
 
         try {
-            message.reply(`🔍 Routing Spotify track through SoundCloud...`);
+            message.reply(`🔍 Routing track through SoundCloud...`);
             await distube.play(voiceChannel, query, {
                 textChannel: message.channel,
                 member: message.member
@@ -57,6 +73,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
+    // !restart Command
     if (command === 'restart' || command === 'reboot') {
         await message.reply('🔄 Restarting services...');
         distube.voices.leave(message.guild.id);
@@ -64,6 +81,7 @@ client.on('messageCreate', async (message) => {
         process.exit(0);
     }
 
+    // !stop Command
     if (command === 'stop' || command === 'leave') {
         const queue = distube.getQueue(message);
         if (!queue) return message.reply('Nothing is playing right now!');
@@ -72,6 +90,7 @@ client.on('messageCreate', async (message) => {
         message.reply('⏹️ Stopped playback.');
     }
 
+    // !skip Command
     if (command === 'skip') {
         try {
             await distube.skip(message);
@@ -82,12 +101,11 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Event Listeners
+// --- 5. Event Listeners & Debuggers ---
 distube.on('playSong', (queue, song) => {
     queue.textChannel.send(`🎶 Now playing: **${song.name}** - \`${song.formattedDuration}\``);
 });
 
-// Built-in debuggers to catch any silent failures
 distube.on('error', (channel, e) => {
     console.error('🔴 DisTube Error:', e);
     if (channel) channel.send(`❌ An error occurred: ${e.message.slice(0, 100)}`);
@@ -97,4 +115,5 @@ distube.on('ffmpegError', (channel, e) => {
     console.error('🔴 FFmpeg Crash:', e);
 });
 
+// --- 6. Login ---
 client.login(process.env.DISCORD_TOKEN);
